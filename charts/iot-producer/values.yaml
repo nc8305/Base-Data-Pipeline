@@ -1,0 +1,23 @@
+# Default values for iot-producer
+
+replicaCount: 1
+
+image:
+  repository: harbor.your-domain.com/capstone/iot-producer
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "v1.0.0"
+
+imagePullSecrets: []
+# - name: harbor-registry-secret
+
+kafka:
+  broker: "kafka-service:9092"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
