@@ -14,4 +14,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Lệnh mặc định chạy script gửi dữ liệu IoT
-CMD ["python", "producer.py"]
+CMD ["python", "ingestion/producer.py"]
