@@ -5,7 +5,6 @@ import os
 from kafka import KafkaProducer
 from datetime import datetime
 
-# Cấu hình Kafka Broker (nếu chạy qua docker-compose thì dùng tên service 'kafka', nếu chạy ngoài thì dùng 'localhost')
 KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'localhost:9092')
 TOPIC_NAME = 'iot_bus_data'
 
@@ -25,14 +24,11 @@ while True:
 
 def generate_bus_data(index):
 
-    # Giả lập tỷ lệ mất dữ liệu cho bài toán Imputation
     is_missing_speed = random.random() < 0.15
     is_missing_gps = random.random() < 0.1
 
-    # Tạo dữ liệu ngẫu nhiên dựa trên format của bạn
     speed = random.randint(0, 60) if not is_missing_speed else None
     
-    # Tọa độ khu vực TP.HCM
     latitude = round(10.762622 + random.uniform(-0.05, 0.05), 6) if not is_missing_gps else None
     longitude = round(106.660172 + random.uniform(-0.05, 0.05), 6) if not is_missing_gps else None
 

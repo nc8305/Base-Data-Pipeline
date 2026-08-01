@@ -1,10 +1,12 @@
+version: '3.8'
+
 services:
   # ==========================================
   # 1. MESSAGE QUEUE (Apache Kafka KRaft Mode)
   # ==========================================
   kafka:
     image: apache/kafka:latest
-    container_name: iot-kafka
+    container_name: hpc-kafka
     ports:
       - "9092:9092"
     environment:
@@ -18,7 +20,7 @@ services:
       - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
 
   # ==========================================
-  # 2. STREAM PROCESSING & HPC (Apache Flink Cluster)
+  # 2. STREAM PROCESSING (Apache Flink Cluster)
   # ==========================================
   jobmanager:
     image: flink:1.18.1-java11
@@ -36,41 +38,94 @@ services:
     depends_on:
       - jobmanager
     command: taskmanager
-    scale: 2 # Chạy 2 TaskManager để mô phỏng xử lý phân tán (HPC)
+    scale: 2 # Scale to 2 instances to simulate distributed processing
     environment:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
-        taskmanager.numberOfTaskSlots: 4 # Mỗi TaskManager có 4 slots để xử lý song song
+        taskmanager.numberOfTaskSlots: 4 # 4 slots per TaskManager
 
   # ==========================================
-  # 3. TIME-SERIES DATABASE (InfluxDB v2)
+  # 3. REAL-TIME OLAP DATABASE (ClickHouse)
   # ==========================================
-  influxdb:
-    image: influxdb:2.7
-    container_name: iot-influxdb
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: hpc-clickhouse
     ports:
-      - "8086:8086"
+      - "8123:8123" # HTTP port (For Grafana connection)
+      - "9000:9000" # Native port (For Flink Sink connection)
     environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword
-      - DOCKER_INFLUXDB_INIT_ORG=iot_org
-      - DOCKER_INFLUXDB_INIT_BUCKET=iot_data
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-auth-token
+      - CLICKHOUSE_USER=admin
+      - CLICKHOUSE_PASSWORD=adminpassword
+      - CLICKHOUSE_DB=hpc_monitor
     volumes:
-      - influxdb-data:/var/lib/influxdb2
+      - clickhouse-data:/var/lib/clickhouse
 
   # ==========================================
-  # 4. IOT DATA PRODUCER (Python script)
+  # 4. DATA LAKEHOUSE STAGING (MinIO)
   # ==========================================
-  iot-producer:
-    build: .
-    container_name: iot-producer
+  minio:
+    image: minio/minio:latest
+    container_name: hpc-minio
+    ports:
+      - "9001:9001" # MinIO Console UI
+      - "9005:9000" # MinIO API (Mapped to 9005 on host to avoid conflict with ClickHouse)
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=adminpassword
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+
+  # ==========================================
+  # 5. DATA VISUALIZATION (Grafana)
+  # ==========================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: hpc-grafana
+    ports:
+      - "3000:3000" # Grafana Web UI
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - clickhouse
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+  # ==========================================
+  # 6. TELEMETRY COLLECTOR (Telegraf)
+  # ==========================================
+  telegraf:
+    image: telegraf:1.39.2
+    container_name: hpc-telegraf
     depends_on:
       - kafka
     environment:
-      - KAFKA_BROKER=kafka:29092 # Trỏ tới internal listener của Kafka
+      - KAFKA_BROKER=kafka:29092
+    volumes:
+      - ./ingestion/telegraf-hpc.conf:/etc/telegraf/telegraf.conf:ro
+    command: ["--config", "/etc/telegraf/telegraf.conf"]
+
+  # ==========================================
+  # 7. NEAR-REALTIME PROCESSING (PySpark)
+  # ==========================================
+  spark-consumer:
+    image: jupyter/pyspark-notebook:latest
+    container_name: hpc-spark-consumer
+    depends_on:
+      - minio
+    environment:
+      # PySpark now reads from MinIO (Bronze Layer) instead of Kafka
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=adminpassword
+      - MINIO_ENDPOINT=http://minio:9000
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command: >
+      bash -lc "pip install -r requirements.txt && python ingestion/spark_consumer.py"
 
 volumes:
-  influxdb-data:
+  clickhouse-data:
+  minio-data:
+  grafana-data:
