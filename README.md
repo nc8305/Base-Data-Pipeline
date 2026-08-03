@@ -80,3 +80,4 @@ docker exec -it hpc-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-s
 **The message format of Telegraf**
 
 {"fields":{"bytes_recv":6927676,"bytes_sent":3547539,"drop_in":0,"drop_out":0,"err_in":0,"err_out":0,"packets_recv":12005,"packets_sent":11259,"speed":-1},"name":"net","tags":{"cluster":"hpc-local-poc","host":"LAPTOP-GOMEDOVR","interface":"Wi-Fi","node_name":"windows-client-1"},"timestamp":1785671380000}
+
