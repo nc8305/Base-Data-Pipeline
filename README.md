@@ -27,7 +27,7 @@ This will start Zookeeper, Kafka, Flink (1 JobManager + 2 TaskManagers), InfluxD
 
 To view the producer logs and see the generated data:
 ```bash
-docker logs -f iot-producer
+docker logs -f hpc-iot-producer
 ```
 
 ## Kubernetes Deployment (Helm)
@@ -35,11 +35,11 @@ For enterprise-level deployment, the project utilizes Helm charts to deploy onto
 
 To deploy the IoT Producer:
 ```bash
-helm install my-iot-producer ./charts/iot-producer
+helm install hpc-iot-producer ./charts/iot-producer
 ```
 You can override default values (like image tag or Kafka broker URL) using `--set`:
 ```bash
-helm install my-iot-producer ./charts/iot-producer \
+helm install hpc-iot-producer ./charts/iot-producer \
   --set image.tag="v1.0.0" \
   --set kafka.broker="kafka-service:9092"
 ```
@@ -56,3 +56,28 @@ To enable the pipeline, configure the following secrets in your repository setti
 - `HARBOR_URL`: Your Harbor registry URL (e.g., `harbor.your-domain.com`)
 - `HARBOR_USERNAME`: Harbor login username.
 - `HARBOR_PASSWORD`: Harbor login password or CLI secret.
+
+docker exec -it hpc-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic hpc-raw-metrics --from-beginning
+
+docker exec -it hpc-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic hpc-raw-metrics
+
+**Create the topic in Kafka**
+docker exec -it hpc-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic hpc-raw-metrics --partitions 1 --replication-factor 1 --if-not-exists
+
+**To test the Telegraf Message**
+PS C:\Telegraf\telegraf-1.39.2_windows_amd64\telegraf-1.39.2> .\telegraf.exe --test --config telegraf.conf
+
+**To Debug the Telegraf**
+.\telegraf.exe --debug --config telegraf.conf
+
+**Watch the number of records of message in Kafka**
+docker exec -it hpc-kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic hpc-raw-metrics
+
+
+**Watch the message of Telegraf in the Kafka Topic**
+docker exec -it hpc-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic hpc-raw-metrics --partition 0 --offset 0
+
+**The message format of Telegraf**
+
+{"fields":{"bytes_recv":6927676,"bytes_sent":3547539,"drop_in":0,"drop_out":0,"err_in":0,"err_out":0,"packets_recv":12005,"packets_sent":11259,"speed":-1},"name":"net","tags":{"cluster":"hpc-local-poc","host":"LAPTOP-GOMEDOVR","interface":"Wi-Fi","node_name":"windows-client-1"},"timestamp":1785671380000}
+
