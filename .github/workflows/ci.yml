@@ -13,6 +13,7 @@ env:
   IMAGE_NAME: iot-producer
   # Lấy Harbor Registry URL từ GitHub Secrets
   REGISTRY: ${{ secrets.HARBOR_URL }} 
+  
   # Tên project trên Harbor
   PROJECT_NAME: capstone
 

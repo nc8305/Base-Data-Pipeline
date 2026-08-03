@@ -27,7 +27,7 @@ This will start Zookeeper, Kafka, Flink (1 JobManager + 2 TaskManagers), InfluxD
 
 To view the producer logs and see the generated data:
 ```bash
-docker logs -f iot-producer
+docker logs -f hpc-iot-producer
 ```
 
 ## Kubernetes Deployment (Helm)
@@ -35,11 +35,11 @@ For enterprise-level deployment, the project utilizes Helm charts to deploy onto
 
 To deploy the IoT Producer:
 ```bash
-helm install my-iot-producer ./charts/iot-producer
+helm install hpc-iot-producer ./charts/iot-producer
 ```
 You can override default values (like image tag or Kafka broker URL) using `--set`:
 ```bash
-helm install my-iot-producer ./charts/iot-producer \
+helm install hpc-iot-producer ./charts/iot-producer \
   --set image.tag="v1.0.0" \
   --set kafka.broker="kafka-service:9092"
 ```

@@ -107,23 +107,43 @@ services:
     command: ["--config", "/etc/telegraf/telegraf.conf"]
 
   # ==========================================
-  # 7. NEAR-REALTIME PROCESSING (PySpark)
+  # 7. IOT DATA PRODUCER
+  # ==========================================
+  iot-producer:
+    build: .
+    container_name: hpc-iot-producer
+    depends_on:
+      - kafka
+    environment:
+      - KAFKA_BROKER=kafka:29092
+
+  # ==========================================
+  # 8. NEAR-REALTIME PROCESSING (PySpark)
   # ==========================================
   spark-consumer:
     image: jupyter/pyspark-notebook:latest
     container_name: hpc-spark-consumer
     depends_on:
-      - minio
+      - kafka
     environment:
-      # PySpark now reads from MinIO (Bronze Layer) instead of Kafka
-      - AWS_ACCESS_KEY_ID=admin
-      - AWS_SECRET_ACCESS_KEY=adminpassword
-      - MINIO_ENDPOINT=http://minio:9000
+      - KAFKA_BROKER=kafka:29092
     volumes:
       - .:/workspace
     working_dir: /workspace
     command: >
       bash -lc "pip install -r requirements.txt && python ingestion/spark_consumer.py"
+
+  # ==========================================
+  # 9. KAFKA MIRROR MAKER 2 (Sync from 3 remote machines)
+  # ==========================================
+  mirrormaker2:
+    image: apache/kafka:latest
+    container_name: hpc-mirrormaker2
+    depends_on:
+      - kafka
+    volumes:
+      - ./mm2.properties:/tmp/mm2.properties
+    command: /opt/kafka/bin/connect-mirror-maker.sh /tmp/mm2.properties
 
 volumes:
   clickhouse-data:
