@@ -81,3 +81,18 @@ docker exec -it hpc-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-s
 
 {"fields":{"bytes_recv":6927676,"bytes_sent":3547539,"drop_in":0,"drop_out":0,"err_in":0,"err_out":0,"packets_recv":12005,"packets_sent":11259,"speed":-1},"name":"net","tags":{"cluster":"hpc-local-poc","host":"LAPTOP-GOMEDOVR","interface":"Wi-Fi","node_name":"windows-client-1"},"timestamp":1785671380000}
 
+## Testing Mock Data Ingestion
+
+To run and test the python mock producer and Spark consumer locally:
+
+1. **Start the Producer**:
+```bash
+python ingestion/producer.py
+```
+This will continuously generate and send mock HPC metrics (procstat, hw_power, win_eventlog) to the `hpc-raw-metrics` Kafka topic.
+
+2. **Start the Spark Consumer**:
+```bash
+python ingestion/spark_consumer.py
+```
+This will read the stream from Kafka and print the parsed metrics to the console.
