@@ -1,61 +1,103 @@
 import json
 import time
 import random
+import uuid
 import os
 from kafka import KafkaProducer
-from datetime import datetime
 
-KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'localhost:9092')
-TOPIC_NAME = 'iot_bus_data'
+# Initialize Kafka Producer
+KAFKA_BROKER = os.getenv('KAFKA_BROKER', '127.0.0.1:9092')
+producer = KafkaProducer(
+    bootstrap_servers=[KAFKA_BROKER],
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+topic_name = "hpc-raw-metrics"
 
-print(f"Connecting to Kafka at {KAFKA_BROKER}...")
+# Define a list of diverse mock hosts/identities
+MOCK_HOSTS = [
+    "windows-client-1",
+    "windows-client-2",
+    "linux-worker-1",
+    "linux-worker-2",
+    "gpu-node-1"
+]
 
-while True:
-    try:
-        producer = KafkaProducer(
-            bootstrap_servers=[KAFKA_BROKER],
-            value_serializer=lambda v: json.dumps(v).encode('utf-8')
-        )
-        print("Connected to Kafka!")
-        break
-    except Exception as e:
-        print(f"Waiting for Kafka to be ready... Error: {e}")
-        time.sleep(5)
-
-def generate_bus_data(index):
-
-    is_missing_speed = random.random() < 0.15
-    is_missing_gps = random.random() < 0.1
-
-    speed = random.randint(0, 60) if not is_missing_speed else None
-    
-    latitude = round(10.762622 + random.uniform(-0.05, 0.05), 6) if not is_missing_gps else None
-    longitude = round(106.660172 + random.uniform(-0.05, 0.05), 6) if not is_missing_gps else None
-
+def generate_procstat_mock(host_id):
     return {
-        "vehicle_id": f"bus_SG_{index % 500}",
-        "route_id": f"route_{random.randint(1, 100)}",
-        "latitude": latitude,
-        "longitude": longitude,
-        "timestamp": time.time(),
-        "speed": speed
+        "fields": {
+            "cmdline": f"\"C:\\VS Code\\Code.exe\" --version=1.127.0 --uid={uuid.uuid4()}",
+            "cpu_time_system": round(random.uniform(0.1, 1.5), 4),
+            "memory_rss": random.randint(4000000, 80000000),
+            "num_threads": random.randint(5, 20),
+            "pid": random.randint(1000, 20000)
+        },
+        "name": "procstat",
+        "tags": {
+            "cluster": "hpc-local-poc",
+            "datacenter": "vn-hcm-zone-1",
+            "host": host_id,
+            "process_name": "Code.exe"
+        },
+        "timestamp": int(time.time() * 1000)
+    }
+
+def generate_power_mock(host_id):
+    return {
+        "fields": {
+            "Power": random.randint(3000, 8000)
+        },
+        "name": "hw_power",
+        "tags": {
+            "cluster": "hpc-local-poc",
+            "datacenter": "vn-hcm-zone-1",
+            "host": host_id
+        },
+        "timestamp": int(time.time() * 1000)
+    }
+
+def generate_eventlog_mock(host_id):
+    return {
+        "fields": {
+            "EventID": random.choice([10016, 404, 500]),
+            "Message": "The application-specific permission settings do not grant Local Activation permission for the COM Server..."
+        },
+        "name": "win_eventlog",
+        "tags": {
+            "Level": str(random.choice([2, 3])),
+            "Source": "Microsoft-Windows-DistributedCOM",
+            "host": host_id
+        },
+        "timestamp": int(time.time() * 1000)
     }
 
 if __name__ == "__main__":
-    print(f"Starting to send data to topic '{TOPIC_NAME}'...")
-    try:
-        index = 0
-        while True:
-            # Gửi dữ liệu giả lập (ví dụ gửi 5 xe mỗi lần lặp)
-            for _ in range(5):
-                data = generate_bus_data(index)
-                producer.send(TOPIC_NAME, data)
-                print(f"Sent: {data}")
-                index += 1
+    print("Starting mock data generation for Kafka (Press Ctrl+C to stop)...")
 
-            producer.flush()
-            time.sleep(1) # Mỗi 1 giây gửi 1 batch
+    try:
+        while True:
+            # Randomly select a payload type and a host identity
+            payload_type = random.choice(["procstat", "power", "eventlog"])
+            selected_host = random.choice(MOCK_HOSTS)
+            
+            if payload_type == "procstat":
+                data = generate_procstat_mock(selected_host)
+            elif payload_type == "power":
+                data = generate_power_mock(selected_host)
+            else:
+                data = generate_eventlog_mock(selected_host)
+                
+            producer.send(topic_name, value=data)
+            
+            # Extract the first metric value for logging purposes
+            first_metric_val = list(data['fields'].values())[0]
+            print(f"[SENT] Type: {data['name']:<15} | Host: {selected_host:<16} | Metric/Event: {first_metric_val}")
+            
+            # Pause for 1 second between transmissions
+            time.sleep(1)
+            
     except KeyboardInterrupt:
-        print("Stopping producer...")
+        print("\nStopped mock data generation.")
     finally:
+        producer.flush()
         producer.close()
+
