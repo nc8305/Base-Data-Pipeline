@@ -2,7 +2,7 @@ import os
 import json
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, LongType
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, LongType, MapType
 
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
 TOPIC = os.getenv("KAFKA_TOPIC", "hpc-raw-metrics")
@@ -18,16 +18,8 @@ spark = (
 schema = StructType([
     StructField("timestamp", LongType(), True),
     StructField("name", StringType(), True),
-    StructField("fields", StructType([
-        StructField("used_percent", DoubleType(), True),
-        StructField("used", DoubleType(), True),
-        StructField("total", DoubleType(), True),
-        StructField("available", DoubleType(), True),
-    ]), True),
-    StructField("tags", StructType([
-        StructField("cluster", StringType(), True),
-        StructField("node_name", StringType(), True),
-    ]), True),
+    StructField("fields", MapType(StringType(), StringType()), True),
+    StructField("tags", MapType(StringType(), StringType()), True),
 ])
 
 raw_df = (

@@ -3,11 +3,12 @@ services:
   # 1. MESSAGE QUEUE (Apache Kafka KRaft Mode)
   # ==========================================
   kafka:
-    image: apache/kafka:latest
+    image: confluentinc/cp-kafka:7.6.1
     container_name: hpc-kafka
     ports:
       - "9092:9092"
     environment:
+      - CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk
       - KAFKA_NODE_ID=1
       - KAFKA_PROCESS_ROLES=broker,controller
       - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
@@ -135,7 +136,7 @@ services:
   # 9. KAFKA MIRROR MAKER 2 (Sync from 3 remote machines)
   # ==========================================
   mirrormaker2:
-    image: apache/kafka:latest
+    image: confluentinc/cp-kafka:7.6.1
     container_name: hpc-mirrormaker2
     depends_on:
       - kafka
