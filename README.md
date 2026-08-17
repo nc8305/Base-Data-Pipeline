@@ -1,98 +1,132 @@
-# IoT Data Stream Processing & Imputation Pipeline
+# HPC Data Stream Processing & Monitoring Pipeline
 
 ## Overview
-This Capstone project focuses on building a High-Performance Computing (HPC) data streaming pipeline for IoT environments. The core research focus is **Data Stream Imputation** — handling and predicting missing sensor data in real-time.
+This Capstone project focuses on building a robust High-Performance Computing (HPC) data streaming pipeline for IoT and telemetry environments. The system handles end-to-end data ingestion, real-time alert generation, stream imputation, and data visualization.
 
 ## Architecture
-- **IoT Data Producer**: A Python-based simulator generating IoT sensor data (with simulated missing values for imputation).
+- **Telemetry Collector**: Telegraf (Collects system metrics from HPC nodes).
+- **IoT Data Producer**: A Python-based simulator generating mock HPC sensor data (`procstat`, `hw_power`, `win_eventlog`).
 - **Message Queue (Ingestion)**: Apache Kafka.
-- **Stream Processing Engine (HPC)**: Apache Flink (Handles the distributed computing and Data Imputation logic).
-- **Time-series Database**: InfluxDB v2.
-- **Deployment & Orchestration**: Kubernetes (K8s) & Helm.
-- **Container Registry**: Harbor.
+- **Real-time Stream Processing**: Apache Flink (PyFlink) - handles sliding windows, aggregation, and anomaly alerting.
+- **Near-Realtime Processing**: Apache Spark (PySpark) - parses and processes raw data streams.
+- **Time-series OLAP Database**: ClickHouse.
+- **Data Lakehouse Storage**: MinIO.
+- **Data Visualization**: Grafana.
 
 ## Project Structure
-- `producer.py`: Python script for IoT data generation.
-- `Dockerfile`: Containerizes the IoT producer.
-- `docker-compose.yml`: Local testing environment setup (Kafka, Flink Cluster, InfluxDB).
-- `charts/iot-producer/`: Helm chart for deploying the producer to a Kubernetes cluster.
-- `.github/workflows/ci.yml`: GitHub Actions CI/CD pipeline for building and pushing the Docker image to a Harbor registry.
+- `ingestion/`: Contains the Telegraf configuration and the Python mock data producer.
+- `stream_processing/`: Contains the PyFlink DataStream jobs (e.g., `realtime_alert.py`).
+- `test_cases/`: Testing utilities (Mock Kafka consumers, jar download scripts).
+- `docker-compose.yml`: Local testing environment setup for all infrastructure components.
+- `charts/`: Helm charts for Kubernetes deployment.
+- `Dockerfile`: Containerizes the Python mock producer.
 
-## Local Development (Docker Compose)
-To run the entire pipeline locally for testing purposes:
+---
+
+## 1. Prerequisites
+- **Docker Desktop** (with WSL2 integration enabled on Windows).
+- **Python 3.10**: PyFlink 1.18.1 strictly requires Python 3.10 maximum. Do not use Python 3.11 or 3.12.
+- **Java 11**: Required for running the PyFlink MiniCluster locally.
+
+---
+
+## 2. Infrastructure Setup (Docker Compose)
+To spin up the entire infrastructure (Kafka, Flink Cluster, ClickHouse, MinIO, Grafana, Telegraf):
 ```bash
-docker-compose up -d --build
+docker-compose up -d
 ```
-This will start Zookeeper, Kafka, Flink (1 JobManager + 2 TaskManagers), InfluxDB, and the IoT Producer container.
 
-To view the producer logs and see the generated data:
+---
+
+## 3. Real-time Alerting Pipeline (PyFlink)
+
+We have built a real-time alerting pipeline that calculates a **10-second tumbling window** over CPU metrics to avoid alert fatigue (spam alerts) common in HPC environments.
+
+### Testing the Pipeline
+To test the pipeline end-to-end, follow these steps:
+
+**Step 3.1: Prepare the Python 3.10 Environment**
+If you are on Ubuntu 24.04 (WSL), you need to install Python 3.10:
 ```bash
-docker logs -f hpc-iot-producer
+sudo add-apt-repository ppa:deadsnakes/ppa -y
+sudo apt update
+sudo apt install python3.10 python3.10-venv -y
+python3.10 -m venv .venv_flink
+source .venv_flink/bin/activate
+pip install apache-flink==1.18.1 kafka-python
 ```
 
-## Kubernetes Deployment (Helm)
-For enterprise-level deployment, the project utilizes Helm charts to deploy onto a Kubernetes cluster.
+**Step 3.2: Download Flink Kafka Connector**
+```bash
+python test_cases/download_jar.py
+```
 
-To deploy the IoT Producer:
+**Step 3.3: Run the Pipeline (Open 3 Terminals)**
+Make sure you run `source .venv_flink/bin/activate` in every terminal.
+
+1. **Start the Alert Consumer (Terminal 1)**: Listens for critical anomalies.
+```bash
+python test_cases/test_consumer.py
+```
+2. **Start the PyFlink Job (Terminal 2)**: Runs the windowing and aggregation engine.
+```bash
+python stream_processing/realtime_alert.py
+```
+3. **Start the Mock Producer (Terminal 3)**: Pumps fake `procstat` CPU data into Kafka.
+```bash
+python ingestion/producer.py
+```
+*If the CPU stays above 90% for 10 seconds, Terminal 1 will trigger a `HIGH_CPU_AVERAGE_10_SECS` JSON alert.*
+
+---
+
+## 4. Near-Realtime Ingestion (Spark)
+To run the PySpark consumer that parses the raw Telegraf schema and prints it to the console:
+```bash
+python ingestion/spark_consumer.py
+```
+
+---
+
+## 5. Kubernetes Deployment (Helm)
+For enterprise-level deployment onto a Kubernetes cluster:
 ```bash
 helm install hpc-iot-producer ./charts/iot-producer
 ```
-You can override default values (like image tag or Kafka broker URL) using `--set`:
+Override default values using `--set`:
 ```bash
 helm install hpc-iot-producer ./charts/iot-producer \
   --set image.tag="v1.0.0" \
   --set kafka.broker="kafka-service:9092"
 ```
 
-## CI/CD Pipeline (GitHub Actions)
-The project is equipped with an automated CI/CD pipeline. 
+---
+
+## 6. CI/CD Pipeline (GitHub Actions)
 Upon pushing to the `main` branch, the pipeline automatically:
 1. Logs into the Harbor Registry.
 2. Builds the Docker image.
 3. Pushes the image to Harbor with `latest` and commit SHA tags.
 
 **Required GitHub Secrets:**
-To enable the pipeline, configure the following secrets in your repository settings:
-- `HARBOR_URL`: Your Harbor registry URL (e.g., `harbor.your-domain.com`)
-- `HARBOR_USERNAME`: Harbor login username.
-- `HARBOR_PASSWORD`: Harbor login password or CLI secret.
+- `HARBOR_URL`, `HARBOR_USERNAME`, `HARBOR_PASSWORD`
 
-docker exec -it hpc-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic hpc-raw-metrics --from-beginning
+---
 
+## Appendix: Useful Kafka & Telegraf Commands
+
+**Check Kafka Topics:**
+```bash
+docker exec -it hpc-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+```
+
+**Consume Raw Metrics from Kafka:**
+```bash
 docker exec -it hpc-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic hpc-raw-metrics
+```
 
-**Create the topic in Kafka**
-docker exec -it hpc-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic hpc-raw-metrics --partitions 1 --replication-factor 1 --if-not-exists
-
-**To test the Telegraf Message**
-PS C:\Telegraf\telegraf-1.39.2_windows_amd64\telegraf-1.39.2> .\telegraf.exe --test --config telegraf.conf
-
-**To Debug the Telegraf**
+**Test Telegraf Configuration (Windows):**
+```powershell
+.\telegraf.exe --test --config telegraf.conf
 .\telegraf.exe --debug --config telegraf.conf
-
-**Watch the number of records of message in Kafka**
-docker exec -it hpc-kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic hpc-raw-metrics
-
-
-**Watch the message of Telegraf in the Kafka Topic**
-docker exec -it hpc-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic hpc-raw-metrics --partition 0 --offset 0
-
-**The message format of Telegraf**
-
-{"fields":{"bytes_recv":6927676,"bytes_sent":3547539,"drop_in":0,"drop_out":0,"err_in":0,"err_out":0,"packets_recv":12005,"packets_sent":11259,"speed":-1},"name":"net","tags":{"cluster":"hpc-local-poc","host":"LAPTOP-GOMEDOVR","interface":"Wi-Fi","node_name":"windows-client-1"},"timestamp":1785671380000}
-
-## Testing Mock Data Ingestion
-
-To run and test the python mock producer and Spark consumer locally:
-
-1. **Start the Producer**:
-```bash
-python ingestion/producer.py
 ```
-This will continuously generate and send mock HPC metrics (procstat, hw_power, win_eventlog) to the `hpc-raw-metrics` Kafka topic.
-
-2. **Start the Spark Consumer**:
-```bash
-python ingestion/spark_consumer.py
-```
-This will read the stream from Kafka and print the parsed metrics to the console.
