@@ -22,7 +22,9 @@ services:
   # 2. STREAM PROCESSING (Apache Flink Cluster)
   # ==========================================
   jobmanager:
-    image: flink:1.18.1-java11
+    build:
+      context: .
+      dockerfile: stream_processing/Dockerfile.flink
     container_name: flink-jobmanager
     ports:
       - "8081:8081" # Flink Web UI
@@ -31,9 +33,16 @@ services:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
+    volumes:
+      - ./stream_processing:/opt/flink/usrlib
+    depends_on:
+      - kafka
+      - clickhouse
 
   taskmanager:
-    image: flink:1.18.1-java11
+    build:
+      context: .
+      dockerfile: stream_processing/Dockerfile.flink
     depends_on:
       - jobmanager
     command: taskmanager
@@ -43,6 +52,8 @@ services:
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 4 # 4 slots per TaskManager
+    volumes:
+      - ./stream_processing:/opt/flink/usrlib
 
   # ==========================================
   # 3. REAL-TIME OLAP DATABASE (ClickHouse)
