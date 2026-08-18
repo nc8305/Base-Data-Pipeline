@@ -1,0 +1,29 @@
+FROM flink:1.18.1-java11
+
+# PyFlink 1.18.1 requires Python 3.10 max. The base Flink image only ships the JVM,
+# so both JobManager and every TaskManager need Python installed for the UDFs
+# (parse_data, reduce_cpu, calculate_avg_and_alert) to run via the Py4J bridge.
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+        software-properties-common \
+        wget \
+        build-essential && \
+    add-apt-repository ppa:deadsnakes/ppa -y && \
+    apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+        python3.10 \
+        python3.10-venv \
+        python3.10-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Point python3/python at 3.10 so the Flink Python worker invokes the right interpreter
+RUN ln -sf /usr/bin/python3.10 /usr/bin/python3 && \
+    ln -sf /usr/bin/python3.10 /usr/bin/python
+
+RUN wget -q https://bootstrap.pypa.io/get-pip.py -O /tmp/get-pip.py && \
+    python3.10 /tmp/get-pip.py && \
+    rm /tmp/get-pip.py
+
+RUN pip3 install --no-cache-dir apache-flink==1.18.1 kafka-python
+
+WORKDIR /opt/flink/usrlib
